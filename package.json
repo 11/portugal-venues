@@ -1,0 +1,10 @@
+{
+  "name": "portugal-venues",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-cards.mjs",
+    "check": "node scripts/check-links.mjs",
+    "serve": "npx serve site"
+  }
+}
