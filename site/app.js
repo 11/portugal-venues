@@ -443,7 +443,7 @@
       if (v.estimate150Usd) lines.push(`   Est. all-in for 150: ${usd(v.estimate150Usd.min)}–${usd(v.estimate150Usd.max)}`);
       lines.push('');
     }
-    lines.push(location.href.split('#')[0]);
+    lines.push('Open these results: ' + shareUrl());
     return lines.join('\n');
   }
 
@@ -464,6 +464,132 @@
       try { ok = document.execCommand('copy'); } catch { /* ignore */ }
       ta.remove();
       toast(ok ? 'Copied to clipboard' : "Couldn't copy. Try again from another browser.");
+    }
+  }
+
+  // ---------- export / import ----------
+  // Share link: every card (sorted by id) gets 2 bits: 0 unswiped, 1 like, 2 pass, 3 skip.
+  const CODE = { like: 1, pass: 2, skip: 3 };
+  const DECODE = [null, 'like', 'pass', 'skip'];
+  const sortedIds = () => [...cardsById.keys()].sort();
+
+  function encodeDecisions() {
+    const ids = sortedIds();
+    const bytes = new Uint8Array(Math.ceil(ids.length / 4));
+    ids.forEach((id, i) => { bytes[i >> 2] |= (CODE[state.decisions[id]] || 0) << ((i & 3) * 2); });
+    const b64 = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return `${ids.length}.${b64}`;
+  }
+
+  function decodeDecisions(str) {
+    const [n, b64] = String(str).split('.');
+    const ids = sortedIds();
+    if (Number(n) !== ids.length || !b64) {
+      throw new Error('This link was made from a different version of the deck. Use “Save file” and “Import” instead.');
+    }
+    const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/'));
+    const out = {};
+    ids.forEach((id, i) => {
+      const code = (bin.charCodeAt(i >> 2) >> ((i & 3) * 2)) & 3;
+      if (code) out[id] = DECODE[code];
+    });
+    return out;
+  }
+
+  function shareUrl() {
+    return `${location.origin}${location.pathname}#r=${encodeDecisions()}`;
+  }
+
+  async function shareLink() {
+    const url = shareUrl();
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+      try { await navigator.share({ title: 'Our venue swipes', url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(url); toast('Share link copied'); }
+    catch { prompt('Copy this link:', url); }
+  }
+
+  function exportData() {
+    const stats = venueStats();
+    return {
+      app: 'portugal-venues',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      swiped: decidedCount(),
+      totalCards: state.order.length,
+      decisions: state.decisions,
+      order: state.order,
+      summary: sorted(stats).map((x) => ({ rank: x.rank, venue: x.v.name, liked: x.liked.length, passed: x.passed, ratio: x.ratio < 0 ? null : Math.round(x.ratio * 1000) / 1000 })),
+    };
+  }
+
+  async function exportFile() {
+    const json = JSON.stringify(exportData(), null, 2);
+    const name = `venue-swipes-${new Date().toISOString().slice(0, 10)}.json`;
+    const file = new File([json], name, { type: 'application/json' });
+    if (navigator.canShare && matchMedia('(pointer: coarse)').matches && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Our venue swipes' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(file);
+    a.download = name;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('Saved ' + name);
+  }
+
+  function applyImport(decisions, label) {
+    const clean = {};
+    let unknown = 0;
+    for (const [id, d] of Object.entries(decisions || {})) {
+      if (!cardsById.has(id)) { unknown++; continue; }
+      if (DECODE.includes(d) && d) clean[id] = d;
+    }
+    const n = Object.keys(clean).length;
+    if (!n) { toast('Nothing to import: no matching swipes found'); return false; }
+    const existing = decidedCount();
+    if (existing && JSON.stringify(clean) !== JSON.stringify(state.decisions)) {
+      if (!confirm(`Replace the ${existing} swipes on this device with ${n} swipes from ${label}?`)) return false;
+    }
+    state.decisions = clean;
+    // Put swiped cards first (in their old order), so the deck carries on where it left off.
+    const done = state.order.filter((id) => id in clean);
+    state.order = done.concat(state.order.filter((id) => !(id in clean)));
+    state.history = done;
+    store.save();
+    elCache.clear();
+    $('#stage').innerHTML = '';
+    $('#menu').hidden = true;
+    show(isDone() ? 'results' : 'swipe');
+    toast(`Imported ${n} swipes${unknown ? ` (${unknown} no longer in the deck)` : ''}`);
+    return true;
+  }
+
+  function importFromFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const j = JSON.parse(reader.result);
+        if (j.app !== 'portugal-venues' || !j.decisions) throw new Error('not a venue swipes file');
+        applyImport(j.decisions, 'the file');
+      } catch (e) {
+        toast(`Couldn't import: ${e.message}`);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function importFromHash() {
+    const m = location.hash.match(/^#r=([\w.-]+)/);
+    if (!m) return false;
+    history.replaceState(null, '', location.pathname + location.search);
+    try {
+      return applyImport(decodeDecisions(m[1]), 'the shared link');
+    } catch (e) {
+      toast(e.message);
+      return false;
     }
   }
 
@@ -551,6 +677,18 @@
       if (t) openLightbox(cardsById.get(t.dataset.card));
     });
     $('#copy-btn').addEventListener('click', copyResults);
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-action]')?.dataset.action;
+      if (a === 'share') shareLink();
+      else if (a === 'export') exportFile();
+      else if (a === 'import') $('#import-input').click();
+    });
+    $('#import-input').addEventListener('change', (e) => {
+      const f = e.target.files?.[0];
+      if (f) importFromFile(f);
+      e.target.value = '';
+    });
+    window.addEventListener('hashchange', importFromHash);
     $('#restart-btn').addEventListener('click', restart);
 
     $('#lightbox').addEventListener('click', (e) => {
@@ -581,6 +719,8 @@
     state = reconcile(store.load());
     store.save();
     bind();
+    window.__venueSwipe = { shareUrl, exportData }; // for debugging in the console
+    if (importFromHash()) return;
     if (isDone()) show('results');
     else if (decidedCount() > 0) show('swipe');
     else showIntro();

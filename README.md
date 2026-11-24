@@ -11,6 +11,15 @@ After the last card, the venues are revealed and ranked by how much we liked the
   You can re-sort by lowest estimated cost or capacity, and copy a plain-text summary.
 - Plain HTML/CSS/JS, no build tooling beyond one small Node script. Media is linked, never rehosted.
 
+## Moving results between devices
+
+Swipes are saved in the browser of the device you swipe on. To see them somewhere else (say, a laptop):
+
+- **Share link** (results page or ☰ menu): a short link that carries every swipe. Text or email it to yourself and open it on the other device.
+- **Save file** / **Import**: downloads a `venue-swipes-YYYY-MM-DD.json` backup (it also holds a readable summary of the ranking). Open the site on the other device and choose Import, also on the start screen.
+
+A share link only works with the same deck it was made from. If venues or media change later, use the file: it's matched card by card, and cards no longer in the deck are skipped.
+
 ## How it fits together
 
 ```

@@ -29,6 +29,7 @@
       </ul>
       <button id="start-btn" class="btn primary">Start swiping</button>
       <p class="fine" id="intro-count"></p>
+      <p class="fine">Already swiped on another device? <button class="linklike" data-action="import">Import saved swipes</button></p>
     </div>
   </section>
 
@@ -47,6 +48,9 @@
       </button>
     </header>
     <div id="menu" class="menu" hidden>
+      <button data-action="share">Share link</button>
+      <button data-action="export">Save swipes as file</button>
+      <button data-action="import">Import swipes…</button>
       <button data-action="restart">Start over…</button>
       <button data-action="close">Close</button>
     </div>
@@ -78,8 +82,15 @@
       <ol id="venue-list" class="venue-list"></ol>
       <div class="results-actions">
         <button id="copy-btn" class="btn primary">Copy results</button>
+        <button class="btn primary" data-action="share">Share link</button>
+      </div>
+      <div class="results-actions secondary">
+        <button class="btn ghost" data-action="export">Save file</button>
+        <button class="btn ghost" data-action="import">Import</button>
         <button id="restart-btn" class="btn ghost">Start over</button>
       </div>
+      <p class="fine">To see these results on another phone or computer, send yourself the share link, or save the file and import it there.</p>
+      <input type="file" id="import-input" accept=".json,application/json" hidden>
       <p class="fine">Prices and capacities are as published by each source in Nov 2026. Confirm with the venue before booking.</p>
     </div>
   </section>
